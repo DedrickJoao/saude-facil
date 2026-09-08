@@ -1,0 +1,6 @@
+{
+  "name": "Saúde Fácil - Micro-Seguro de Saúde",
+  "description": "Plataforma completa de micro-seguro de saúde por assinatura com gestão de pacientes, pagamentos M-Pesa, histórico médico em PDF, farmácias parceiras e lembretes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

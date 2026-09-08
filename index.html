@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Saúde Fácil - Micro-Seguro de Saúde</title>
+    <meta name="description" content="Plataforma completa de micro-seguro de saúde por assinatura com gestão de pacientes, pagamentos M-Pesa, histórico médico em PDF, farmácias parceiras e lembretes." />
+    <meta property="og:title" content="Saúde Fácil - Micro-Seguro de Saúde" />
+    <meta property="og:description" content="Plataforma completa de micro-seguro de saúde por assinatura com gestão de pacientes, pagamentos M-Pesa, histórico médico em PDF, farmácias parceiras e lembretes." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          var originalFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
+          var customFetch = originalFetch;
+          
+          function defineFetchOn(obj) {
+            try {
+              Object.defineProperty(obj, 'fetch', {
+                get: function() {
+                  return customFetch || originalFetch;
+                },
+                set: function(fn) {
+                  customFetch = fn;
+                },
+                configurable: true,
+                enumerable: true
+              });
+              return true;
+            } catch (e) {
+              return false;
+            }
+          }
+
+          if (!defineFetchOn(window)) {
+            defineFetchOn(Window.prototype);
+          }
+        } catch (err) {
+          console.warn('Fetch setter safeguard init error:', err);
+        }
+      })();
+    </script>
+  </head>
+  <body class="bg-[#F9FAFB] text-slate-900 font-sans antialiased selection:bg-sky-500 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
