@@ -9,17 +9,22 @@ import {
   INITIAL_REDEMPTIONS,
   INITIAL_NOTIFICATIONS,
   SUBSCRIPTION_PLANS,
+  PARTNER_CLINICS,
+  DRUG_INTERACTION_RULES,
   calculateMetrics
 } from './src/data/mockDatabase';
 import {
   Patient,
   PartnerPharmacy,
+  PartnerClinic,
+  Appointment,
   PaymentTransaction,
   PharmacyDiscountRedemption,
   NotificationLog,
   MedicalRecord,
   HealthReminder,
-  PatientDocument
+  PatientDocument,
+  PaymentProvider
 } from './src/types';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,6 +33,7 @@ const __dirname = path.dirname(__filename);
 // In-Memory Database Store (Stateful backend)
 let patientsStore: Patient[] = JSON.parse(JSON.stringify(INITIAL_PATIENTS));
 let pharmaciesStore: PartnerPharmacy[] = JSON.parse(JSON.stringify(INITIAL_PHARMACIES));
+let clinicsStore: PartnerClinic[] = JSON.parse(JSON.stringify(PARTNER_CLINICS));
 let transactionsStore: PaymentTransaction[] = JSON.parse(JSON.stringify(INITIAL_TRANSACTIONS));
 let redemptionsStore: PharmacyDiscountRedemption[] = JSON.parse(JSON.stringify(INITIAL_REDEMPTIONS));
 let notificationsStore: NotificationLog[] = JSON.parse(JSON.stringify(INITIAL_NOTIFICATIONS));
@@ -271,7 +277,9 @@ async function startServer() {
 
     // Clean phone number (Format: 84XXXXXXX or 85XXXXXXX)
     const cleanPhone = (mpesaPhone || patient.phone).replace(/[^0-9]/g, '').slice(-9);
-    const mpesaTxId = `MP${new Date().toISOString().slice(2, 10).replace(/-/g, '')}.${Math.floor(1000 + Math.random() * 9000)}.${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+    const { provider = 'MPESA' } = req.body;
+    const providerPrefix = provider === 'EMOLA' ? 'EM' : provider === 'MKESH' ? 'MK' : 'MP';
+    const mpesaTxId = `${providerPrefix}${new Date().toISOString().slice(2, 10).replace(/-/g, '')}.${Math.floor(1000 + Math.random() * 9000)}.${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
 
     const plan = SUBSCRIPTION_PLANS.find((p) => p.id === planId) || SUBSCRIPTION_PLANS.find((p) => p.id === patient.subscription?.planId) || SUBSCRIPTION_PLANS[0];
     const finalAmount = amountMzn || plan.priceMzn;
@@ -284,6 +292,7 @@ async function startServer() {
       amountMzn: finalAmount,
       mpesaPhone: cleanPhone,
       mpesaTransactionId: mpesaTxId,
+      provider: provider as PaymentProvider,
       status: 'CONCLUIDO',
       createdAt: new Date().toISOString(),
       planName: plan.name
@@ -297,6 +306,7 @@ async function startServer() {
       patient.subscription.planId = plan.id;
       patient.subscription.planName = plan.name;
       patient.subscription.priceMzn = plan.priceMzn;
+      patient.subscription.paymentMethod = provider === 'EMOLA' ? 'EMOLA' : 'MPESA';
       patient.subscription.lastPaymentDate = new Date().toISOString().split('T')[0];
       patient.subscription.nextBillingDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       patient.subscription.mpesaNumber = cleanPhone;
@@ -311,6 +321,8 @@ async function startServer() {
       });
     }
 
+    const providerLabel = provider === 'EMOLA' ? 'e-Mola (Movitel)' : provider === 'MKESH' ? 'mKesh (Tmcel)' : 'M-Pesa (Vodacom)';
+
     // Send instant confirmation SMS
     notificationsStore.unshift({
       id: `notif-${Date.now()}`,
@@ -318,15 +330,15 @@ async function startServer() {
       patientName: patient.fullName,
       recipient: cleanPhone,
       type: 'SMS',
-      subject: 'M-Pesa: Pagamento Confirmado',
-      message: `Confirmado: ${mpesaTxId} - Transferência de ${finalAmount}.00 MZN para SAUDE FACIL efectuada com sucesso. A sua assinatura está ATIVA até ${patient.subscription?.nextBillingDate}.`,
+      subject: `${providerLabel}: Pagamento Confirmado`,
+      message: `Confirmado: ${mpesaTxId} - Transferência de ${finalAmount}.00 MZN via ${providerLabel} para SAUDE FACIL efectuada com sucesso. A sua assinatura está ATIVA até ${patient.subscription?.nextBillingDate}.`,
       status: 'ENVIADO',
       sentAt: new Date().toISOString()
     });
 
     res.json({
       success: true,
-      message: 'Pagamento M-Pesa processado com sucesso!',
+      message: `Pagamento via ${providerLabel} processado com sucesso!`,
       transaction: newTransaction,
       subscription: patient.subscription
     });
@@ -508,6 +520,198 @@ async function startServer() {
       recentTransactions: transactionsStore.slice(0, 10),
       recentRedemptions: redemptionsStore.slice(0, 10),
       recentNotifications: notificationsStore.slice(0, 10)
+    });
+  });
+
+  // 13. Partner Clinics List
+  app.get('/api/clinics', (req: Request, res: Response) => {
+    res.json(clinicsStore);
+  });
+
+  // 14. Appointments (List, Create, Update)
+  app.get('/api/appointments', (req: Request, res: Response) => {
+    const { patientId } = req.query;
+    let allAppointments: Appointment[] = [];
+    patientsStore.forEach((p) => {
+      if (p.appointments) {
+        allAppointments.push(...p.appointments);
+      }
+    });
+
+    if (patientId && typeof patientId === 'string') {
+      allAppointments = allAppointments.filter((a) => a.patientId === patientId);
+    }
+
+    allAppointments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    res.json(allAppointments);
+  });
+
+  app.post('/api/appointments', (req: Request, res: Response) => {
+    const { patientId, clinicName, doctorName, specialty, date, time, reason, isTeleconsultation = false } = req.body;
+    const patient = patientsStore.find((p) => p.id === patientId);
+    if (!patient) {
+      return res.status(404).json({ error: 'Paciente não encontrado' });
+    }
+
+    const isCovered = patient.subscription?.status === 'ATIVA';
+    const costMzn = isCovered ? 0 : 750;
+
+    const newAppointment: Appointment = {
+      id: `apt-${Date.now()}`,
+      patientId: patient.id,
+      patientName: patient.fullName,
+      memberNumber: patient.memberNumber,
+      clinicName: clinicName || 'Centro Médico Polana Care',
+      doctorName: doctorName || 'Dr. Médico Especialista',
+      specialty: specialty || 'Clínica Geral',
+      date: date || new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      time: time || '09:00',
+      status: 'CONFIRMADA',
+      reason: reason || 'Consulta de rotina / acompanhamento',
+      location: isTeleconsultation ? 'Teleconsulta Online (Link SMS)' : (clinicName || 'Centro Médico Polana Care'),
+      isTeleconsultation: Boolean(isTeleconsultation),
+      costMzn,
+      coveredByPlan: isCovered,
+      createdAt: new Date().toISOString()
+    };
+
+    if (!patient.appointments) patient.appointments = [];
+    patient.appointments.unshift(newAppointment);
+
+    // Also register a Reminder
+    if (!patient.reminders) patient.reminders = [];
+    patient.reminders.unshift({
+      id: `rem-apt-${Date.now()}`,
+      patientId: patient.id,
+      title: `Consulta: ${newAppointment.specialty} (${newAppointment.clinicName})`,
+      description: `Agendada para ${newAppointment.date} às ${newAppointment.time}. Motivo: ${newAppointment.reason}`,
+      type: 'CHECKUP',
+      dueDate: newAppointment.date,
+      completed: false,
+      priority: 'ALTA',
+      channel: 'SMS'
+    });
+
+    // Send confirmation notification
+    notificationsStore.unshift({
+      id: `notif-${Date.now()}`,
+      patientId: patient.id,
+      patientName: patient.fullName,
+      recipient: patient.phone,
+      type: 'SMS',
+      subject: 'Consulta Agendada e Confirmada',
+      message: `Saúde Fácil: Sua consulta de ${newAppointment.specialty} na ${newAppointment.clinicName} foi confirmada para ${newAppointment.date} às ${newAppointment.time}. ${isCovered ? 'Totalmente coberta pelo seu plano!' : 'Taxa de atendimento: 750 MZN.'}`,
+      status: 'ENVIADO',
+      sentAt: new Date().toISOString()
+    });
+
+    res.status(201).json(newAppointment);
+  });
+
+  app.patch('/api/appointments/:id/status', (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    for (const patient of patientsStore) {
+      const apt = patient.appointments?.find((a) => a.id === id);
+      if (apt) {
+        apt.status = status;
+        return res.json(apt);
+      }
+    }
+
+    res.status(404).json({ error: 'Consulta não encontrada' });
+  });
+
+  // 15. Instant Member Verification & QR Scanner API
+  app.get('/api/verify-member/:identifier', (req: Request, res: Response) => {
+    const { identifier } = req.params;
+    const cleanId = decodeURIComponent(identifier).trim().toUpperCase();
+
+    const patient = patientsStore.find(
+      (p) =>
+        p.memberNumber.toUpperCase() === cleanId ||
+        p.id.toUpperCase() === cleanId ||
+        p.idNumber.toUpperCase() === cleanId ||
+        p.phone.replace(/[^0-9]/g, '') === cleanId.replace(/[^0-9]/g, '')
+    );
+
+    if (!patient) {
+      return res.status(404).json({
+        found: false,
+        error: 'Cartão ou utente não localizado no sistema central Saúde Fácil.'
+      });
+    }
+
+    const plan = SUBSCRIPTION_PLANS.find((pl) => pl.id === patient.subscription?.planId) || SUBSCRIPTION_PLANS[0];
+    const isPlanActive = patient.subscription?.status === 'ATIVA';
+
+    res.json({
+      found: true,
+      patient: {
+        id: patient.id,
+        memberNumber: patient.memberNumber,
+        fullName: patient.fullName,
+        phone: patient.phone,
+        dateOfBirth: patient.dateOfBirth,
+        gender: patient.gender,
+        bloodType: patient.bloodType,
+        allergies: patient.allergies || [],
+        idNumber: patient.idNumber,
+        province: patient.address.province,
+        city: patient.address.city
+      },
+      subscription: {
+        status: patient.subscription?.status || 'PENDENTE',
+        isActive: isPlanActive,
+        planId: plan.id,
+        planName: plan.name,
+        discountPharmacyRate: plan.discountPharmacyRate,
+        includedConsultations: plan.includedConsultations,
+        nextBillingDate: patient.subscription?.nextBillingDate,
+        lastPaymentDate: patient.subscription?.lastPaymentDate
+      },
+      allergyAlerts: DRUG_INTERACTION_RULES.filter((rule) =>
+        rule.matchedAllergies.some((alg) =>
+          patient.allergies?.some((pa) => pa.toLowerCase().includes(alg))
+        )
+      )
+    });
+  });
+
+  // 16. Drug Allergies & Interactions Safety Checker
+  app.post('/api/check-drug-interactions', (req: Request, res: Response) => {
+    const { patientId, medicationNames = [] } = req.body;
+    const patient = patientsStore.find((p) => p.id === patientId);
+    const allergies = (patient?.allergies || []).map((a) => a.toLowerCase());
+
+    const detectedWarnings: any[] = [];
+
+    medicationNames.forEach((med: string) => {
+      const medLower = med.toLowerCase();
+      DRUG_INTERACTION_RULES.forEach((rule) => {
+        if (medLower.includes(rule.substanceKey)) {
+          const matched = allergies.filter((alg) =>
+            rule.matchedAllergies.some((m) => m.includes(alg) || alg.includes(m))
+          );
+          if (matched.length > 0) {
+            detectedWarnings.push({
+              medication: med,
+              ruleKey: rule.substanceKey,
+              matchedAllergy: matched.join(', '),
+              severity: rule.severity,
+              warningMessage: rule.warningMessage,
+              alternatives: rule.alternatives
+            });
+          }
+        }
+      });
+    });
+
+    res.json({
+      safe: detectedWarnings.length === 0,
+      warningsCount: detectedWarnings.length,
+      warnings: detectedWarnings
     });
   });
 

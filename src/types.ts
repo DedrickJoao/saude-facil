@@ -45,6 +45,8 @@ export interface Subscription {
   lastPaymentDate?: string;
 }
 
+export type PaymentProvider = 'MPESA' | 'EMOLA' | 'MKESH' | 'SIMO_CARD';
+
 export interface PaymentTransaction {
   id: string;
   patientId: string;
@@ -53,9 +55,46 @@ export interface PaymentTransaction {
   amountMzn: number;
   mpesaPhone: string;
   mpesaTransactionId: string;
+  provider?: PaymentProvider;
   status: 'CONCLUIDO' | 'PENDENTE' | 'FALHOU';
   createdAt: string;
   planName: string;
+}
+
+export type AppointmentStatus = 'AGENDADA' | 'CONFIRMADA' | 'REALIZADA' | 'CANCELADA';
+
+export interface Appointment {
+  id: string;
+  patientId: string;
+  patientName: string;
+  memberNumber: string;
+  clinicName: string;
+  doctorName: string;
+  specialty: string;
+  date: string;
+  time: string;
+  status: AppointmentStatus;
+  reason: string;
+  location: string;
+  isTeleconsultation?: boolean;
+  costMzn: number;
+  coveredByPlan: boolean;
+  createdAt: string;
+}
+
+export interface PartnerClinic {
+  id: string;
+  name: string;
+  type: 'CLINICA' | 'CENTRO_MEDICO' | 'HOSPITAL' | 'LABORATORIO';
+  address: string;
+  neighborhood: string;
+  city: string;
+  province: string;
+  phone: string;
+  specialties: string[];
+  openingHours: string;
+  rating: number;
+  acceptsEmergency: boolean;
 }
 
 export type MedicalRecordType = 'CONSULTA' | 'EXAME' | 'MEDICAMENTO_RECEITADO' | 'CHECKUP_GERAL';
@@ -129,6 +168,7 @@ export interface Patient {
   documents?: PatientDocument[];
   medicalRecords?: MedicalRecord[];
   reminders?: HealthReminder[];
+  appointments?: Appointment[];
 }
 
 export interface PartnerPharmacy {

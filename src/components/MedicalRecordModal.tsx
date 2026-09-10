@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { Stethoscope, X, Plus, Trash2, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Stethoscope, X, Plus, Trash2, CheckCircle2, Loader2, AlertCircle, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { MedicalRecord, MedicalRecordType, PrescribedMedication } from '../types';
 
 interface MedicalRecordModalProps {
   patientId: string;
   patientName: string;
+  patientAllergies?: string[];
   isOpen: boolean;
   onClose: () => void;
   onRecordCreated: (newRecord: MedicalRecord) => void;
@@ -13,6 +14,7 @@ interface MedicalRecordModalProps {
 export const MedicalRecordModal: React.FC<MedicalRecordModalProps> = ({
   patientId,
   patientName,
+  patientAllergies = [],
   isOpen,
   onClose,
   onRecordCreated
@@ -21,7 +23,7 @@ export const MedicalRecordModal: React.FC<MedicalRecordModalProps> = ({
   const [title, setTitle] = useState('');
   const [doctorName, setDoctorName] = useState('Dr. Armando Mondlane');
   const [specialty, setSpecialty] = useState('Clínica Geral');
-  const [healthUnit, setHealthUnit] = useState('Centro Médico Polana');
+  const [healthUnit, setHealthUnit] = useState('Centro Médico Polana Care');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [diagnosis, setDiagnosis] = useState('');
   const [symptoms, setSymptoms] = useState('');
@@ -32,16 +34,51 @@ export const MedicalRecordModal: React.FC<MedicalRecordModalProps> = ({
   const [medications, setMedications] = useState<PrescribedMedication[]>([
     {
       id: 'med-1',
-      name: 'Amoxicilina 500mg',
+      name: 'Paracetamol 500mg',
       dosage: '1 comprimido de 8/8h',
       frequency: '3x ao dia',
-      duration: '7 dias',
+      duration: '5 dias',
       discountEligible: true
     }
   ]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Compute real-time allergy alerts
+  const allergyWarnings = useMemo(() => {
+    if (!patientAllergies || patientAllergies.length === 0) return [];
+    const patientAlgs = patientAllergies.map((a) => a.toLowerCase());
+    const warnings: string[] = [];
+
+    medications.forEach((med) => {
+      const medName = med.name.toLowerCase();
+      if (!medName) return;
+
+      if (
+        (medName.includes('penicil') || medName.includes('amoxicil') || medName.includes('ampicil')) &&
+        patientAlgs.some((a) => a.includes('penicil') || a.includes('amoxicil'))
+      ) {
+        warnings.push(`Contra-indicação: "${med.name}" contém Penicilina/Betalactâmico e o utente é ALÉRGICO.`);
+      }
+
+      if (
+        (medName.includes('ibuprof') || medName.includes('aspirin') || medName.includes('diclofenac') || medName.includes('cetoprof')) &&
+        patientAlgs.some((a) => a.includes('ibuprof') || a.includes('aspirin') || a.includes('aine'))
+      ) {
+        warnings.push(`Alerta de AINE: "${med.name}" é um anti-inflamatório e o utente possui intolerância/alergia.`);
+      }
+
+      if (
+        (medName.includes('sulfa') || medName.includes('bactrim') || medName.includes('cotrimox')) &&
+        patientAlgs.some((a) => a.includes('sulfa'))
+      ) {
+        warnings.push(`Risco Severo: "${med.name}" contém Sulfonamidas e o utente é alérgico.`);
+      }
+    });
+
+    return warnings;
+  }, [medications, patientAllergies]);
 
   if (!isOpen) return null;
 
@@ -234,8 +271,8 @@ export const MedicalRecordModal: React.FC<MedicalRecordModalProps> = ({
           </div>
 
           {/* Medications Section */}
-          <div className="pt-2 border-t border-gray-200">
-            <div className="flex items-center justify-between mb-2">
+          <div className="pt-2 border-t border-gray-200 space-y-2">
+            <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-bold text-gray-800">
                 Medicamentos Prescritos (Com desconto nas Farmácias Parceiras)
               </label>
@@ -248,6 +285,21 @@ export const MedicalRecordModal: React.FC<MedicalRecordModalProps> = ({
                 Adicionar Medicamento
               </button>
             </div>
+
+            {/* Real-time Allergy Conflict Warning */}
+            {allergyWarnings.length > 0 && (
+              <div className="p-3 bg-rose-50 border-2 border-rose-400 rounded-xl space-y-1">
+                <div className="flex items-center gap-2 text-rose-800 font-bold text-xs">
+                  <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>ALERTA DE SEGURANÇA FARMACOLÓGICA ({allergyWarnings.length})</span>
+                </div>
+                {allergyWarnings.map((warn, i) => (
+                  <p key={i} className="text-[11px] text-rose-700 pl-6 leading-tight">
+                    • {warn}
+                  </p>
+                ))}
+              </div>
+            )}
 
             <div className="space-y-2">
               {medications.map((med, index) => (

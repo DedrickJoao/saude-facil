@@ -1,12 +1,117 @@
 import {
   Patient,
   PartnerPharmacy,
+  PartnerClinic,
+  Appointment,
   SubscriptionPlan,
   PaymentTransaction,
   PharmacyDiscountRedemption,
   NotificationLog,
   AdminDashboardMetrics
 } from '../types';
+
+export const PARTNER_CLINICS: PartnerClinic[] = [
+  {
+    id: 'cln-01',
+    name: 'Centro Médico Polana Care',
+    type: 'CENTRO_MEDICO',
+    address: 'Av. Julius Nyerere, nº 2140',
+    neighborhood: 'Polana',
+    city: 'Maputo',
+    province: 'Maputo Cidade',
+    phone: '+258 21 498 800',
+    specialties: ['Clínica Geral', 'Pediatria', 'Cardiologia', 'Ginecologia', 'Nutrição'],
+    openingHours: '24 Horas (Seg a Dom)',
+    rating: 4.9,
+    acceptsEmergency: true
+  },
+  {
+    id: 'cln-02',
+    name: 'Clínica da Matola Viva',
+    type: 'CLINICA',
+    address: 'Av. da União Africana, nº 450',
+    neighborhood: 'Matola Central',
+    city: 'Matola',
+    province: 'Maputo Província',
+    phone: '+258 84 550 1122',
+    specialties: ['Clínica Geral', 'Pediatria', 'Oftalmologia', 'Dermatologia'],
+    openingHours: '07:30 - 20:00 (Seg a Sáb)',
+    rating: 4.8,
+    acceptsEmergency: false
+  },
+  {
+    id: 'cln-03',
+    name: 'Hospital Privado da Beira - Policlínica',
+    type: 'HOSPITAL',
+    address: 'Rua Major Serpa Pinto, nº 88',
+    neighborhood: 'Chiveve',
+    city: 'Beira',
+    province: 'Sofala',
+    phone: '+258 82 990 3344',
+    specialties: ['Clínica Geral', 'Cirurgia Geral', 'Ortopedia', 'Ginecologia', 'Pediatria'],
+    openingHours: '24 Horas (Seg a Dom)',
+    rating: 4.9,
+    acceptsEmergency: true
+  },
+  {
+    id: 'cln-04',
+    name: 'Laboratório & Clínica Nampula Med',
+    type: 'LABORATORIO',
+    address: 'Av. Eduardo Mondlane, nº 120',
+    neighborhood: 'Centro',
+    city: 'Nampula',
+    province: 'Nampula',
+    phone: '+258 84 888 7766',
+    specialties: ['Análises Clínicas', 'Clínica Geral', 'Infecciologia', 'Medicina do Trabalho'],
+    openingHours: '07:00 - 18:00 (Seg a Sex)',
+    rating: 4.7,
+    acceptsEmergency: false
+  }
+];
+
+export const DRUG_INTERACTION_RULES: Array<{
+  substanceKey: string;
+  matchedAllergies: string[];
+  severity: 'CRITICA' | 'ALTA' | 'MODERADA';
+  warningMessage: string;
+  alternatives: string;
+}> = [
+  {
+    substanceKey: 'penicil',
+    matchedAllergies: ['penicilina', 'penicilinas', 'amoxicilina', 'ampicilina', 'beta-lactamicos'],
+    severity: 'CRITICA',
+    warningMessage: 'Risco de Choque Anafilático / Reação Alérgica Grave: O utente possui alergia documentada a Penicilinas.',
+    alternatives: 'Considere Macrolídeos (Azitromicina, Claritromicina) ou Quinolonas.'
+  },
+  {
+    substanceKey: 'amoxicil',
+    matchedAllergies: ['penicilina', 'amoxicilina', 'ampicilina'],
+    severity: 'CRITICA',
+    warningMessage: 'Contra-indicação absoluta: Paciente alérgico a Penicilinas/Amoxicilina.',
+    alternatives: 'Azitromicina 500mg ou Ciprofloxacina.'
+  },
+  {
+    substanceKey: 'ibuprof',
+    matchedAllergies: ['ibuprofeno', 'aine', 'aines', 'aspirina', 'acido acetilsalicilico', 'dipirona'],
+    severity: 'ALTA',
+    warningMessage: 'Alerta de AINE: Paciente alérgico a anti-inflamatórios não-esteróides.',
+    alternatives: 'Considere Paracetamol 500mg/1000mg ou Tramadol.'
+  },
+  {
+    substanceKey: 'aspirin',
+    matchedAllergies: ['aspirina', 'acido acetilsalicilico', 'aine', 'aines'],
+    severity: 'ALTA',
+    warningMessage: 'Alerta de Hipersensibilidade a Salicilatos.',
+    alternatives: 'Paracetamol.'
+  },
+  {
+    substanceKey: 'sulfa',
+    matchedAllergies: ['sulfa', 'sulfas', 'cotrimoxazol', 'bactrim'],
+    severity: 'CRITICA',
+    warningMessage: 'Alerta de Alergia a Sulfonamidas: Risco de Síndrome de Stevens-Johnson.',
+    alternatives: 'Amoxicilina (se não alérgico) ou Doxiciclina.'
+  }
+];
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
@@ -307,6 +412,26 @@ export const INITIAL_PATIENTS: Patient[] = [
         priority: 'MEDIA',
         channel: 'SMS'
       }
+    ],
+    appointments: [
+      {
+        id: 'apt-01',
+        patientId: 'pat-01',
+        patientName: 'Maria Helena Sitoe',
+        memberNumber: 'SF-84920',
+        clinicName: 'Centro Médico Polana Care',
+        doctorName: 'Dr. Armando Mondlane',
+        specialty: 'Clínica Geral',
+        date: '2026-09-18',
+        time: '10:30',
+        status: 'CONFIRMADA',
+        reason: 'Controlo de Tensão Arterial e Renovação de Receita',
+        location: 'Av. Julius Nyerere, nº 2140, Polana, Maputo',
+        isTeleconsultation: false,
+        costMzn: 0,
+        coveredByPlan: true,
+        createdAt: '2026-09-01T08:30:00Z'
+      }
     ]
   },
   {
@@ -470,6 +595,26 @@ export const INITIAL_PATIENTS: Patient[] = [
         priority: 'MEDIA',
         channel: 'EMAIL'
       }
+    ],
+    appointments: [
+      {
+        id: 'apt-02',
+        patientId: 'pat-03',
+        patientName: 'Fátima Ibrahimo Baúque',
+        memberNumber: 'SF-99201',
+        clinicName: 'Hospital Privado da Beira - Policlínica',
+        doctorName: 'Dr. Salomão Guambe',
+        specialty: 'Ginecologia e Obstetrícia',
+        date: '2026-09-25',
+        time: '14:00',
+        status: 'CONFIRMADA',
+        reason: 'Consulta de Rotina e Revisão de Ecografia',
+        location: 'Rua Major Serpa Pinto, nº 88, Chiveve, Beira',
+        isTeleconsultation: false,
+        costMzn: 0,
+        coveredByPlan: true,
+        createdAt: '2026-09-02T11:00:00Z'
+      }
     ]
   },
   {
@@ -606,6 +751,45 @@ export const INITIAL_REDEMPTIONS: PharmacyDiscountRedemption[] = [
     finalPriceMzn: 1430,
     redemptionDate: '2026-08-11T16:00:00Z',
     receiptNumber: 'REC-2026-90214'
+  }
+];
+
+export const INITIAL_APPOINTMENTS: Appointment[] = [
+  {
+    id: 'apt-01',
+    patientId: 'pat-01',
+    patientName: 'Maria Helena Sitoe',
+    memberNumber: 'SF-84920',
+    clinicName: 'Centro Médico Polana Care',
+    doctorName: 'Dr. Armando Mondlane',
+    specialty: 'Clínica Geral',
+    date: '2026-09-18',
+    time: '10:30',
+    status: 'CONFIRMADA',
+    reason: 'Controlo de Tensão Arterial e Renovação de Receita',
+    location: 'Av. Julius Nyerere, nº 2140, Polana, Maputo',
+    isTeleconsultation: false,
+    costMzn: 0,
+    coveredByPlan: true,
+    createdAt: '2026-09-01T08:30:00Z'
+  },
+  {
+    id: 'apt-02',
+    patientId: 'pat-02',
+    patientName: 'António Carlos Mabote',
+    memberNumber: 'SF-77192',
+    clinicName: 'Clínica 24 Matola',
+    doctorName: 'Dra. Elsa Cossa',
+    specialty: 'Cardiologia',
+    date: '2026-09-22',
+    time: '14:00',
+    status: 'CONFIRMADA',
+    reason: 'Avaliação Cardiovascular Preventiva',
+    location: 'Av. das Indústrias, Matola',
+    isTeleconsultation: false,
+    costMzn: 0,
+    coveredByPlan: true,
+    createdAt: '2026-09-02T11:00:00Z'
   }
 ];
 

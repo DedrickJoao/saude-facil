@@ -19,30 +19,43 @@ import {
   Mail,
   MapPin,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Video,
+  Building2,
+  AlertCircle,
+  XCircle,
+  Check
 } from 'lucide-react';
-import { Patient, MedicalRecord, HealthReminder } from '../types';
+import { Patient, MedicalRecord, HealthReminder, Appointment, PartnerClinic } from '../types';
 import { generateMedicalHistoryPDF } from '../utils/pdfGenerator';
 import { MpesaPaymentModal } from './MpesaPaymentModal';
 import { MedicalRecordModal } from './MedicalRecordModal';
 import { DocumentUploader } from './DocumentUploader';
+import { DigitalCardQRModal } from './DigitalCardQRModal';
+import { AppointmentBookingModal } from './AppointmentBookingModal';
 
 interface PatientDashboardProps {
   patient: Patient;
+  clinics?: PartnerClinic[];
   onUpdatePatient: (updated: Patient) => void;
   onOpenPharmacyView: () => void;
 }
 
 export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   patient,
+  clinics = [],
   onUpdatePatient,
   onOpenPharmacyView
 }) => {
-  const [activeTab, setActiveTab] = useState<'HISTORICO' | 'LEMBRETES' | 'DOCUMENTOS' | 'CARTAO'>(
+  const [activeTab, setActiveTab] = useState<'HISTORICO' | 'CONSULTAS' | 'LEMBRETES' | 'DOCUMENTOS' | 'CARTAO'>(
     'HISTORICO'
   );
   const [isMpesaModalOpen, setIsMpesaModalOpen] = useState(false);
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
+
+  // Reminder creation
   const [showAddReminder, setShowAddReminder] = useState(false);
   const [reminderTitle, setReminderTitle] = useState('');
   const [reminderType, setReminderType] = useState<'CHECKUP' | 'VACINA' | 'MEDICACAO'>('CHECKUP');
@@ -80,6 +93,36 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
     onUpdatePatient(updated);
   };
 
+  const handleAppointmentCreated = (newAppointment: Appointment) => {
+    const updated: Patient = {
+      ...patient,
+      appointments: [newAppointment, ...(patient.appointments || [])]
+    };
+    onUpdatePatient(updated);
+    setActiveTab('CONSULTAS');
+  };
+
+  const handleToggleAppointmentStatus = async (appointmentId: string, newStatus: 'REALIZADA' | 'CANCELADA') => {
+    try {
+      await fetch(`/api/appointments/${appointmentId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+    } catch (e) {
+      // optimistic
+    }
+
+    const updatedApts = (patient.appointments || []).map((a) =>
+      a.id === appointmentId ? { ...a, status: newStatus } : a
+    );
+
+    onUpdatePatient({
+      ...patient,
+      appointments: updatedApts
+    });
+  };
+
   const handleToggleReminder = async (reminderId: string) => {
     try {
       await fetch(`/api/reminders/${reminderId}/toggle`, { method: 'PATCH' });
@@ -108,6 +151,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
         body: JSON.stringify({
           patientId: patient.id,
           title: reminderTitle,
+          description: `Lembrete de saúde para ${patient.fullName}`,
           type: reminderType,
           dueDate: reminderDate,
           priority: reminderPriority,
@@ -116,16 +160,16 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
       });
 
       if (response.ok) {
-        const createdReminder: HealthReminder = await response.json();
+        const newRem = await response.json();
         onUpdatePatient({
           ...patient,
-          reminders: [createdReminder, ...(patient.reminders || [])]
+          reminders: [newRem, ...(patient.reminders || [])]
         });
         setReminderTitle('');
         setShowAddReminder(false);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -164,6 +208,12 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-gray-100 text-gray-700">
                   {patient.memberNumber}
                 </span>
+                {patient.allergies && patient.allergies.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 text-rose-600" />
+                    Alergia: {patient.allergies.join(', ')}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-3 text-xs text-gray-500 mt-1 flex-wrap">
                 <span className="flex items-center gap-1">
@@ -179,22 +229,41 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
             </div>
           </div>
 
-          {/* Subscription Action Button */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <button
+              onClick={() => setIsQRModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
+              title="Exibir cartão virtual e QR code para farmácias"
+            >
+              <QrCode className="w-4 h-4 text-sky-400" />
+              Cartão Digital (QR)
+            </button>
+
+            <button
+              onClick={() => setIsAppointmentModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
+              title="Agendar consulta médica coberta"
+            >
+              <Calendar className="w-4 h-4" />
+              Marcar Consulta
+            </button>
+
             <button
               onClick={handleExportPDF}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold transition-colors cursor-pointer"
               title="Baixar histórico clínico completo em PDF"
             >
               <FileDown className="w-4 h-4 text-sky-600" />
-              Exportar Histórico (PDF)
+              PDF
             </button>
+
             <button
               onClick={() => setIsMpesaModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
             >
               <CreditCard className="w-4 h-4" />
-              {isSubscriptionActive ? 'Gerir M-Pesa' : 'Pagar via M-Pesa'}
+              {isSubscriptionActive ? 'M-Pesa / Renovação' : 'Pagar M-Pesa'}
             </button>
           </div>
         </div>
@@ -295,8 +364,21 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
           }`}
         >
           <Stethoscope className="w-4 h-4" />
-          Histórico Médico ({patient.medicalRecords?.length || 0})
+          Histórico Clínico ({patient.medicalRecords?.length || 0})
         </button>
+
+        <button
+          onClick={() => setActiveTab('CONSULTAS')}
+          className={`pb-3 px-3.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'CONSULTAS'
+              ? 'border-sky-600 text-sky-700'
+              : 'border-transparent text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          Consultas Agendadas ({patient.appointments?.length || 0})
+        </button>
+
         <button
           onClick={() => setActiveTab('LEMBRETES')}
           className={`pb-3 px-3.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
@@ -308,6 +390,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
           <Bell className="w-4 h-4" />
           Lembretes & Vacinas ({patient.reminders?.length || 0})
         </button>
+
         <button
           onClick={() => setActiveTab('CARTAO')}
           className={`pb-3 px-3.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
@@ -317,8 +400,9 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
           }`}
         >
           <CreditCard className="w-4 h-4" />
-          Cartão Digital de Membro
+          Cartão Digital & QR Code
         </button>
+
         <button
           onClick={() => setActiveTab('DOCUMENTOS')}
           className={`pb-3 px-3.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
@@ -340,7 +424,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
               <Stethoscope className="w-4 h-4 text-sky-600" />
-              Consultas, Exames e Prescrições Registadas
+              Histórico de Atendimentos Clínicos e Prescrições
             </h3>
             <button
               onClick={() => setIsRecordModalOpen(true)}
@@ -358,84 +442,75 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               <p className="text-xs text-gray-500 mt-1">
                 Adicione a sua primeira consulta ou exame para acompanhar o seu histórico de saúde.
               </p>
-              <button
-                onClick={() => setIsRecordModalOpen(true)}
-                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-600 text-white text-xs font-bold cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" /> Adicionar Registo
-              </button>
             </div>
           ) : (
             <div className="space-y-3">
               {patient.medicalRecords.map((record) => (
                 <div
                   key={record.id}
-                  className="bg-white border border-gray-200 rounded-2xl p-4 md:p-5 shadow-xs space-y-3 hover:border-gray-300 transition-colors"
+                  className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-gray-300 transition-all"
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3 mb-3">
                     <div className="flex items-center gap-2.5">
-                      <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-200">
-                        {record.type}
-                      </span>
-                      <h4 className="text-sm font-bold text-gray-900">{record.title}</h4>
-                    </div>
-                    <div className="text-xs text-gray-500 flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span>{record.date}</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600">
-                    <p>
-                      <strong className="text-gray-800">Médico:</strong> {record.doctorName} ({record.specialty})
-                    </p>
-                    <p>
-                      <strong className="text-gray-800">Unidade de Saúde:</strong> {record.healthUnit}
-                    </p>
-                  </div>
-
-                  {record.diagnosis && (
-                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-xs">
-                      <strong className="text-gray-800 block mb-0.5">Diagnóstico & Observações:</strong>
-                      <p className="text-gray-600">{record.diagnosis}</p>
-                    </div>
-                  )}
-
-                  {record.treatmentNotes && (
-                    <p className="text-xs text-gray-600">
-                      <strong className="text-gray-800">Recomendações:</strong> {record.treatmentNotes}
-                    </p>
-                  )}
-
-                  {/* Medications with Pharmacy discount badge */}
-                  {record.medications && record.medications.length > 0 && (
-                    <div className="pt-2">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <strong className="text-xs text-gray-800 flex items-center gap-1.5">
-                          <Pill className="w-3.5 h-3.5 text-sky-600" />
-                          Medicamentos Receitados:
-                        </strong>
-                        <button
-                          onClick={onOpenPharmacyView}
-                          className="text-[11px] text-sky-600 hover:text-sky-700 font-bold flex items-center gap-1 cursor-pointer"
-                        >
-                          Ver Farmácias com Desconto <ChevronRight className="w-3 h-3" />
-                        </button>
+                      <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
+                        {record.type === 'CONSULTA' ? (
+                          <Stethoscope className="w-5 h-5" />
+                        ) : record.type === 'EXAME' ? (
+                          <FileText className="w-5 h-5" />
+                        ) : (
+                          <Pill className="w-5 h-5" />
+                        )}
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider block">
+                          {record.type}
+                        </span>
+                        <h4 className="font-bold text-gray-900 text-sm">{record.title}</h4>
+                      </div>
+                    </div>
+                    <div className="text-left sm:text-right text-xs text-gray-500">
+                      <span className="font-semibold text-gray-700">{record.date}</span>
+                      <p className="text-[11px] text-gray-400">{record.healthUnit}</p>
+                    </div>
+                  </div>
+
+                  {/* Diagnosis and Notes */}
+                  <div className="space-y-2 text-xs text-gray-700">
+                    {record.diagnosis && (
+                      <p>
+                        <strong className="text-gray-900">Diagnóstico:</strong> {record.diagnosis}
+                      </p>
+                    )}
+                    {record.treatmentNotes && (
+                      <p>
+                        <strong className="text-gray-900">Recomendações:</strong> {record.treatmentNotes}
+                      </p>
+                    )}
+                    {record.doctorName && (
+                      <p className="text-[11px] text-gray-500">
+                        Médico(a): <strong>{record.doctorName}</strong> ({record.specialty})
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Prescribed Medications */}
+                  {record.medications && record.medications.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 bg-sky-50/50 p-3 rounded-xl">
+                      <p className="text-[11px] font-bold text-sky-900 mb-1.5 flex items-center gap-1.5">
+                        <Pill className="w-3.5 h-3.5 text-sky-700" />
+                        Medicamentos Prescritos com Desconto em Farmácias:
+                      </p>
+                      <div className="space-y-1">
                         {record.medications.map((med) => (
                           <div
                             key={med.id}
-                            className="p-2.5 rounded-xl bg-sky-50/50 border border-sky-200 flex items-center justify-between text-xs"
+                            className="text-xs text-gray-800 flex items-center justify-between"
                           >
-                            <div>
-                              <p className="font-bold text-gray-800">{med.name}</p>
-                              <p className="text-[11px] text-gray-500">
-                                {med.dosage} • {med.frequency} ({med.duration})
-                              </p>
-                            </div>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-600 text-white shrink-0">
-                              Desconto Elegível
+                            <span>
+                              • <strong>{med.name}</strong> — {med.dosage} ({med.frequency})
+                            </span>
+                            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">
+                              Desconto Válido
                             </span>
                           </div>
                         ))}
@@ -449,87 +524,207 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
         </div>
       )}
 
-      {/* 2. Lembretes e Vacinas */}
+      {/* 2. Consultas Agendadas */}
+      {activeTab === 'CONSULTAS' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-sky-600" />
+              Marcações e Consultas da Rede Convencionada
+            </h3>
+            <button
+              onClick={() => setIsAppointmentModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Marcar Nova Consulta
+            </button>
+          </div>
+
+          {(!patient.appointments || patient.appointments.length === 0) ? (
+            <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center space-y-2">
+              <Calendar className="w-12 h-12 text-gray-300 mx-auto" />
+              <p className="text-sm font-bold text-gray-700">Nenhuma consulta agendada no momento</p>
+              <p className="text-xs text-gray-500 max-w-md mx-auto">
+                Agende a sua consulta médica de Clínica Geral, Pediatria ou Cardiologia coberta pelo seu plano Saúde Fácil.
+              </p>
+              <button
+                onClick={() => setIsAppointmentModalOpen(true)}
+                className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-600 text-white font-bold text-xs"
+              >
+                <Plus className="w-4 h-4" /> Marcar Consulta Agora
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {patient.appointments.map((apt) => (
+                <div
+                  key={apt.id}
+                  className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          apt.status === 'CONFIRMADA'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : apt.status === 'REALIZADA'
+                            ? 'bg-gray-100 text-gray-700'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        ● {apt.status}
+                      </span>
+                      {apt.isTeleconsultation ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 flex items-center gap-1">
+                          <Video className="w-3 h-3" /> Teleconsulta
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 flex items-center gap-1">
+                          <Building2 className="w-3 h-3" /> Presencial
+                        </span>
+                      )}
+                      <span className="text-xs font-bold text-gray-800">
+                        {apt.specialty} — {apt.doctorName}
+                      </span>
+                    </div>
+
+                    <p className="text-xs font-bold text-sky-900">{apt.clinicName}</p>
+                    <p className="text-xs text-gray-600">
+                      Motivo: <em>{apt.reason}</em>
+                    </p>
+                    <div className="flex items-center gap-3 text-xs text-gray-500 pt-1">
+                      <span className="flex items-center gap-1 font-semibold text-gray-800">
+                        <Calendar className="w-3.5 h-3.5 text-sky-600" /> {apt.date} às {apt.time}
+                      </span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-gray-400" /> {apt.location}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex sm:flex-col items-end justify-between sm:justify-center gap-2 border-t sm:border-t-0 pt-2 sm:pt-0">
+                    <span
+                      className={`text-xs font-extrabold ${
+                        apt.coveredByPlan ? 'text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200' : 'text-gray-800'
+                      }`}
+                    >
+                      {apt.coveredByPlan ? '0 MZN (Incluído)' : `${apt.costMzn} MZN`}
+                    </span>
+
+                    {apt.status === 'CONFIRMADA' && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleAppointmentStatus(apt.id, 'REALIZADA')}
+                          className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-semibold cursor-pointer"
+                        >
+                          Concluir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleAppointmentStatus(apt.id, 'CANCELADA')}
+                          className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-semibold cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. Lembretes e Vacinas */}
       {activeTab === 'LEMBRETES' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
               <Bell className="w-4 h-4 text-sky-600" />
-              Lembretes de Saúde, Vacinas e Check-Ups
+              Lembretes de Saúde, Vacinação e Check-Ups
             </h3>
             <button
               onClick={() => setShowAddReminder(!showAddReminder)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              Novo Lembrete
+              Criar Lembrete
             </button>
           </div>
 
-          {/* New Reminder Form */}
+          {/* Form to add reminder */}
           {showAddReminder && (
             <form
               onSubmit={handleCreateReminder}
-              className="p-4 bg-white border border-sky-200 rounded-2xl shadow-xs space-y-3"
+              className="bg-white border border-sky-200 rounded-2xl p-4 shadow-xs space-y-3"
             >
-              <h4 className="text-xs font-bold text-gray-800">Criar Novo Lembrete de Saúde</h4>
+              <h4 className="text-xs font-bold text-gray-800">Novo Lembrete Preventivo</h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Título</label>
                   <input
                     type="text"
-                    placeholder="Descrição do Lembrete (Ex: Vacina da Hepatite B)"
+                    required
+                    placeholder="Ex: Vacina contra tétano"
                     value={reminderTitle}
                     onChange={(e) => setReminderTitle(e.target.value)}
-                    className="w-full text-xs bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-gray-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    required
+                    className="w-full text-xs bg-gray-50 border border-gray-300 rounded-xl p-2.5 text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Tipo</label>
                   <select
                     value={reminderType}
                     onChange={(e) => setReminderType(e.target.value as any)}
-                    className="w-full text-xs bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-gray-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    className="w-full text-xs bg-gray-50 border border-gray-300 rounded-xl p-2.5 text-gray-800 focus:bg-white"
                   >
-                    <option value="CHECKUP">Check-Up</option>
+                    <option value="CHECKUP">Check-up Preventivo</option>
                     <option value="VACINA">Vacinação</option>
                     <option value="MEDICACAO">Medicação</option>
                   </select>
                 </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Data Limite</label>
                   <input
                     type="date"
                     value={reminderDate}
                     onChange={(e) => setReminderDate(e.target.value)}
-                    className="w-full text-xs bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-gray-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    required
+                    className="w-full text-xs bg-gray-50 border border-gray-300 rounded-xl p-2.5 text-gray-800"
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Prioridade</label>
                   <select
                     value={reminderPriority}
                     onChange={(e) => setReminderPriority(e.target.value as any)}
-                    className="w-full text-xs bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-gray-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    className="w-full text-xs bg-gray-50 border border-gray-300 rounded-xl p-2.5 text-gray-800"
                   >
-                    <option value="ALTA">Prioridade Alta</option>
-                    <option value="MEDIA">Prioridade Média</option>
-                    <option value="BAIXA">Prioridade Baixa</option>
+                    <option value="ALTA">Alta</option>
+                    <option value="MEDIA">Média</option>
+                    <option value="BAIXA">Baixa</option>
                   </select>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    className="flex-1 py-2 rounded-xl bg-sky-600 text-white font-bold text-xs cursor-pointer"
-                  >
-                    Salvar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddReminder(false)}
-                    className="px-3 py-2 rounded-xl border border-gray-300 text-gray-700 text-xs font-semibold cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddReminder(false)}
+                  className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-xl bg-sky-600 text-white text-xs font-bold shadow-xs hover:bg-sky-700 cursor-pointer"
+                >
+                  Salvar Lembrete
+                </button>
               </div>
             </form>
           )}
@@ -538,35 +733,35 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
             {(patient.reminders || []).map((reminder) => (
               <div
                 key={reminder.id}
-                className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                className={`bg-white border rounded-2xl p-4 shadow-xs flex items-center justify-between gap-3 transition-all ${
                   reminder.completed
-                    ? 'bg-gray-50 border-gray-200 opacity-60'
-                    : 'bg-white border-gray-200 shadow-xs'
+                    ? 'border-gray-200 bg-gray-50/50 opacity-60'
+                    : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => handleToggleReminder(reminder.id)}
-                    className={`w-6 h-6 rounded-lg border flex items-center justify-center transition-colors cursor-pointer ${
+                    className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors cursor-pointer ${
                       reminder.completed
-                        ? 'bg-sky-600 border-sky-600 text-white'
-                        : 'border-gray-300 hover:border-sky-500 text-transparent'
+                        ? 'bg-emerald-600 border-emerald-600 text-white'
+                        : 'border-gray-300 hover:border-sky-500'
                     }`}
                   >
-                    <CheckCircle2 className="w-4 h-4" />
+                    {reminder.completed && <Check className="w-3.5 h-3.5" />}
                   </button>
                   <div>
-                    <p
+                    <h5
                       className={`text-xs font-bold ${
-                        reminder.completed ? 'line-through text-gray-500' : 'text-gray-800'
+                        reminder.completed ? 'line-through text-gray-500' : 'text-gray-900'
                       }`}
                     >
                       {reminder.title}
-                    </p>
+                    </h5>
                     <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
-                      <span className="font-semibold text-sky-700">Data: {reminder.dueDate}</span>
+                      <span>Data: {reminder.dueDate}</span>
                       <span>•</span>
-                      <span className="uppercase text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                      <span className="font-semibold text-sky-700 uppercase text-[10px]">
                         {reminder.type}
                       </span>
                       <span>•</span>
@@ -590,7 +785,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
         </div>
       )}
 
-      {/* 3. Cartão Digital de Membro */}
+      {/* 4. Cartão Digital de Membro */}
       {activeTab === 'CARTAO' && (
         <div className="max-w-md mx-auto space-y-4">
           <div className="bg-gradient-to-tr from-slate-950 via-slate-900 to-sky-950 text-white p-6 rounded-3xl shadow-xl border border-sky-500/20 relative overflow-hidden">
@@ -634,22 +829,31 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                 <p className="text-[10px] text-slate-400">Plano Contratado</p>
                 <p className="text-xs font-bold text-slate-200">{subscription?.planName || 'Básico'}</p>
               </div>
-              <div className="p-1.5 bg-white rounded-lg">
-                <QrCode className="w-9 h-9 text-slate-900" />
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsQRModalOpen(true)}
+                className="p-2 bg-white rounded-xl shadow-md hover:bg-sky-50 transition-colors cursor-pointer"
+                title="Ampliar QR Code"
+              >
+                <QrCode className="w-8 h-8 text-slate-900" />
+              </button>
             </div>
           </div>
 
-          <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-xs text-gray-600 space-y-1.5 text-center">
-            <p className="font-bold text-gray-800">Como utilizar este cartão?</p>
-            <p>
-              Apresente este cartão digital no seu telemóvel ao chegar a clínicas ou farmácias conveniadas da rede Saúde Fácil para ter acesso imediato às consultas gratuitas e descontos de até 35%.
-            </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setIsQRModalOpen(true)}
+              className="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+            >
+              <QrCode className="w-4 h-4" />
+              Ver Cartão Digital Completo & QR Code
+            </button>
           </div>
         </div>
       )}
 
-      {/* 4. Documentos Anexados */}
+      {/* 5. Documentos Anexados */}
       {activeTab === 'DOCUMENTOS' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -715,13 +919,30 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
         onPaymentSuccess={handlePaymentSuccess}
       />
 
-      {/* Medical Record Creation Modal */}
+      {/* Medical Record Creation Modal with Allergy Checks */}
       <MedicalRecordModal
         patientId={patient.id}
         patientName={patient.fullName}
+        patientAllergies={patient.allergies}
         isOpen={isRecordModalOpen}
         onClose={() => setIsRecordModalOpen(false)}
         onRecordCreated={handleRecordCreated}
+      />
+
+      {/* Digital Member Card & QR Modal */}
+      <DigitalCardQRModal
+        patient={patient}
+        isOpen={isQRModalOpen}
+        onClose={() => setIsQRModalOpen(false)}
+      />
+
+      {/* Appointment Booking Modal */}
+      <AppointmentBookingModal
+        patient={patient}
+        clinics={clinics}
+        isOpen={isAppointmentModalOpen}
+        onClose={() => setIsAppointmentModalOpen(false)}
+        onAppointmentCreated={handleAppointmentCreated}
       />
     </div>
   );
